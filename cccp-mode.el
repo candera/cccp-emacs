@@ -11,6 +11,7 @@
 ;;
 ;; TODO: Write usage information
 
+;;; Handle buffer changes
 (defvar cccp-last-before-change nil)
 
 (defun cccp-before-change (beg end)
@@ -23,6 +24,26 @@
     (message "Text in buffer at position %d changed from '%s' to '%s'"
              beg (third cccp-last-before-change) after-text)))
 
+;;; Handle incoming traffic from the agent
+(defun cccp-agent-filter (conn data)
+  (message "Received data from agent: %s" data))
+
+;;; Networking
+(defun cccp-agent-connect (port)
+  "Opens a connection to the cccp agent and returs it."
+  (let ((conn (open-network-stream "cccp-agent" nil "localhost" port)))
+    (set-process-filter conn 'cccp-agent-filter)
+    conn))
+
+(defun cccp-send (conn s)
+  "Sends the string s to the cccp-agent represented by proc."
+  (process-send-string conn s))
+
+(defun cccp-agent-disconnect (conn)
+  "Closes the connection to the cccp agent"
+  (delete-process conn))
+
+;;; Minor mode setup
 (defvar cccp-mode-map (make-sparse-keymap)
   "Keymap for cccp-mode.")
 
