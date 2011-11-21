@@ -24,15 +24,35 @@
 ;;; Handle buffer changes
 (defvar cccp-last-before-change nil)
 
+(defun cccp-compute-edits (pos buffer-size before-text after-text)
+  "Compute the list of edits the current change represents.
+
+POS is the position where the change begins.
+BUFFER-SIZE is the size of the whole buffer after the change is made.
+BEFORE-TEXT is the text before it was changed. This is the empty string on an insert.
+AFTER-TEXT is the text after it was changed. This is the empty string on a delete."
+  (let ((before-length (length before-text))
+        (after-length (length after-text)))
+    (append
+     (when (< 0 pos) `(:retain ,pos))
+     (when (< 0 before-length) `(:delete ,before-text))
+     (when (< 0 after-length) `(:insert ,after-text))
+     ;; TODO: Deal with narrowing
+     ;; TODO: Is the right size to compute the one *after* all the edits?
+     (let ((length-delta (- after-length before-length)))
+       (list :retain (- buffer-size pos length-delta))))))
+
 (defun cccp-before-change (beg end)
   "Records the location of the change that is about to take place."
   (setq cccp-last-before-change (list beg end (buffer-substring beg end))))
 
 (defun cccp-after-change (beg end len)
   "Records the location of the change that just happened."
-  (let  ((after-text (buffer-substring beg end)))
+  (let ((before-text (third cccp-last-before-change))
+        (after-text (buffer-substring beg end)))
     (cccp-debug "Text in buffer at position %d changed from '%s' to '%s'"
-             beg (third cccp-last-before-change) after-text)))
+                beg (third cccp-last-before-change) after-text)
+    (cccp-debug "Computed changes: %S" (cccp-compute-edits beg  before-text-after-text))))
 
 ;;; Swank
 (defun cccp-swank-length (body)
