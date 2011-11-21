@@ -2,7 +2,7 @@
 
 cccp-mode is an emacs mode for interacting with a Common Collaborative
 Coding Protocol server. One such server can be found
-[here]:"https://github.com/djspiewak/cccp". 
+[here](https://github.com/djspiewak/cccp). 
 
 # What is the status of cccp-mode?
 
