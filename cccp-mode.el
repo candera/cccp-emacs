@@ -11,6 +11,16 @@
 ;;
 ;; TODO: Write usage information
 
+;;; Def true for debugging
+(defvar cccp-debug-level t)
+(defvar cccp-simultate-send nil)        ; Bind to t to prevent sending
+                                        ; anything: only debug output
+                                        ; will be produced
+
+(defun cccp-debug (msg &rest args)
+  (when cccp-debug-level
+    (message (format msg args))))
+
 ;;; Handle buffer changes
 (defvar cccp-last-before-change nil)
 
@@ -21,27 +31,81 @@
 (defun cccp-after-change (beg end len)
   "Records the location of the change that just happened."
   (let  ((after-text (buffer-substring beg end)))
-    (message "Text in buffer at position %d changed from '%s' to '%s'"
+    (cccp-debug "Text in buffer at position %d changed from '%s' to '%s'"
              beg (third cccp-last-before-change) after-text)))
 
-;;; Handle incoming traffic from the agent
-(defun cccp-agent-filter (conn data)
-  (message "Received data from agent: %s" data))
+;;; Swank
+(defun cccp-swank-length (body)
+  "Calculates the length prefix that needs to go at the front of a swank message."
+  (format "%06x" (length body)))
 
-;;; Networking
+(defun cccp-sexp-to-string (sexp)
+  "Turns an s-sexpression into a string suitable for transmission via swank."
+  (with-temp-buffer
+    (let (print-escape-nonascii         ; Don't escape non-ASCII
+          print-escape-newlines         ; Don't escape newlines
+          print-length                  ; Don't truncate by length
+          print-level)                  ; Don't truncate by level
+      (prin1 sexp (current-buffer))
+      (buffer-string))))
+
+(defun cccp-swank-encode (sexp)
+  "Encode the specified s-expression suitable for transmission via swank."
+  (let ((body (concat (cccp-sexp-to-string sexp) "\n")))
+    (concat (cccp-swank-length body) body)))
+
+;;; Agent interaction
+
+;; Handle incoming traffic from the agent
+(defun cccp-agent-filter (agent data)
+  (cccp-debug "Received data from agent: %s" data)
+  ;; TODO: Implement
+  )
+
 (defun cccp-agent-connect (port)
   "Opens a connection to the cccp agent and returs it."
-  (let ((conn (open-network-stream "cccp-agent" nil "localhost" port)))
-    (set-process-filter conn 'cccp-agent-filter)
-    conn))
+  (let ((agent (open-network-stream "cccp-agent" nil "localhost" port)))
+    (set-process-filter agent 'cccp-agent-filter)
+    ;; TODO: cccp-agent-init-server-connection here?
+    agent))
 
-(defun cccp-send (conn s)
-  "Sends the string s to the cccp-agent represented by proc."
-  (process-send-string conn s))
+(defun cccp-send (agent sexp)
+  "Sends the s-expression sexp to the cccp-agent agent."
+  (let ((msg (cccp-swank-encode sexp)))
+    (cccp-debug (format "Sending message: %s" msg))
+    (unless cccp-simultate-send
+      (process-send-string agent msg))))
 
-(defun cccp-agent-disconnect (conn)
+(defun cccp-agent-disconnect (agent)
   "Closes the connection to the cccp agent"
-  (delete-process conn))
+  (delete-process agent))
+
+(defun cccp-agent-init-server-connection (agent protocol host port)
+  "Initializes the agent's connection with the server."
+  (cccp-send agent `(swank:init-connection (:protocol ,protocol :host ,host :port ,port))))
+
+(defun cccp-agent-link-file (agent id file-name)
+  "Registers changes made for the given id/file-name for synchronization via the server"
+  (cccp-send agent `(swank:link-file ,id ,file-name)))
+
+(defun cccp-agent-unlink-file (agent file-name)
+  "Deregisters changes made for the given file-name from syncrhonization via the server."
+  (cccp-send agent `(swank:unlink-file ,file-name)))
+
+(defun cccp-agent-edit-file (agent file-name &rest edits)
+  "Sends the specified edits to `file-name` to the agent.
+
+Edits must be pairs of the form TYPE VALE, where TYPE is one
+of :retain, :insert, or :delete, as specified by
+https://github.com/djspiewak/cccp/. Note that the edit list must
+span the entire file, even if that means having a :retain at the
+end."
+  (cccp-send agent `(swank:edit-file ,file-name ,edits)))
+
+
+(defun cccp-agent-shutdown (agent)
+  "Sends the shutdown message to the agent."
+  (cccp-send agent `(swank:shutdown)))
 
 ;;; Minor mode setup
 (defvar cccp-mode-map (make-sparse-keymap)
