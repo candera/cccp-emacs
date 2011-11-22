@@ -39,8 +39,7 @@ AFTER-TEXT is the text after it was changed. This is the empty string on a delet
      (when (< 0 after-length) `(:insert ,after-text))
      ;; TODO: Deal with narrowing
      ;; TODO: Is the right size to compute the one *after* all the edits?
-     (let* ((length-delta (- after-length before-length))
-            (remaining (- buffer-size (+ pos length-delta))))
+     (let ((remaining (- buffer-size (1- pos) after-length)))
        (when (< 0 remaining)
          (list ':retain remaining))))))
 
