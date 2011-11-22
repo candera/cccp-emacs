@@ -62,6 +62,10 @@ AFTER-TEXT is the text after it was changed. This is the empty string on a delet
   "Calculates the length prefix that needs to go at the front of a swank message."
   (format "%06x" (length body)))
 
+(defun cccp-swank-decode-length (input)
+  "Turn the six-digit hex numeric string `input` into a number"
+  (string-to-number input 16))
+
 (defun cccp-sexp-to-string (sexp)
   "Turns an s-sexpression into a string suitable for transmission via swank."
   (with-temp-buffer
@@ -77,13 +81,46 @@ AFTER-TEXT is the text after it was changed. This is the empty string on a delet
   (let ((body (concat (cccp-sexp-to-string sexp) "\n")))
     (concat (cccp-swank-length body) body)))
 
+(defun cccp-swank-decode (input &optional forms)
+  "Parses input, returning (PARSED . REMAINING).
+
+PARSED is a list consisting of FORMS prepended to the of objects
+parsed from the input.
+REMAINING in the unparseable remainder.
+
+So, for example, `(cccp-dispatch \"000007(a b c)000007(d e f)00002f(a b\")`
+would return (((a b c) (d e f)) . \"00002f(a b\""
+
+  ;; If we don't have at least six characters (the length), there's
+  ;; nothing we can do: wait for more input
+  (if (> 6 (length input))
+      (cons forms input)
+    (let ((msg-length (cccp-swank-decode-length (substring input 0 6))))
+      (if (> (+ 6 msg-length) (length input))
+          ;; The whole message hasn't been received yet
+          (cons forms input)
+        (let ((msg-body (substring input 6 (+ 6 msg-length)))
+              (remainder (substring input (+ 6 msg-length))))
+          ;; Recurse to pick up any additional forms that haven't been
+          ;; parsed yet
+          (cccp-swank-decode remainder (append forms (list (read msg-body)))))))))
+
 ;;; Agent interaction
 
 ;; Handle incoming traffic from the agent
+(defvar cccp-pending-input "")
+
+(defun cccp-agent-dispatch (forms)
+  "Dispatches FORMS received from agent."
+  (cccp-debug "Dispatching %S" forms))
+
 (defun cccp-agent-filter (agent data)
   (cccp-debug "Received data from agent: %s" data)
-  ;; TODO: Implement
-  )
+  (setq cccp-pending-input (concat cccp-pending-input data))
+  (let ((parsed-input (cccp-swank-decode cccp-pending-input)))
+    (setq cccp-pending-input (cdr parsed-input))
+    (when (car parsed-input)
+      (cccp-agent-dispatch (car parsed-input)))))
 
 (defun cccp-agent-connect (port)
   "Opens a connection to the cccp agent and returs it."
@@ -172,6 +209,8 @@ broken. Use at your own risk."
     (make-local-variable 'before-change-functions)
     (make-local-variable 'after-change-functions)
     (add-to-list 'before-change-functions 'cccp-before-change)
-    (add-to-list 'after-change-functions 'cccp-after-change)))
+    (add-to-list 'after-change-functions 'cccp-after-change)
+
+    (make-local-variable 'cccp-pending-input)))
 
 (provide 'cccp-mode)
