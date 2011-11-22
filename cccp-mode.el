@@ -17,9 +17,9 @@
                                         ; anything: only debug output
                                         ; will be produced
 
-(defun cccp-debug (msg &rest args)
-  (when cccp-debug-level
-    (message (format msg args))))
+(defmacro cccp-debug (msg &rest args)
+  `(when cccp-debug-level
+     (message ,msg ,@args)))
 
 ;;; Handle buffer changes
 (defvar cccp-last-before-change nil)
@@ -34,13 +34,15 @@ AFTER-TEXT is the text after it was changed. This is the empty string on a delet
   (let ((before-length (length before-text))
         (after-length (length after-text)))
     (append
-     (when (< 0 pos) `(:retain ,pos))
+     (when (< 1 pos) `(:retain ,(1- pos)))
      (when (< 0 before-length) `(:delete ,before-text))
      (when (< 0 after-length) `(:insert ,after-text))
      ;; TODO: Deal with narrowing
      ;; TODO: Is the right size to compute the one *after* all the edits?
-     (let ((length-delta (- after-length before-length)))
-       (list :retain (- buffer-size pos length-delta))))))
+     (let* ((length-delta (- after-length before-length))
+            (remaining (- buffer-size (+ pos length-delta))))
+       (when (< 0 remaining)
+         (list ':retain remaining))))))
 
 (defun cccp-before-change (beg end)
   "Records the location of the change that is about to take place."
@@ -50,9 +52,11 @@ AFTER-TEXT is the text after it was changed. This is the empty string on a delet
   "Records the location of the change that just happened."
   (let ((before-text (third cccp-last-before-change))
         (after-text (buffer-substring beg end)))
+    (cccp-debug "(beg end len) %S" (list beg end len))
+    (cccp-debug "cccp-last-before-change %S" cccp-last-before-change)
     (cccp-debug "Text in buffer at position %d changed from '%s' to '%s'"
-                beg (third cccp-last-before-change) after-text)
-    (cccp-debug "Computed changes: %S" (cccp-compute-edits beg  before-text-after-text))))
+                beg before-text after-text)
+    (cccp-debug "Computed changes: %S" (cccp-compute-edits beg (buffer-size) before-text after-text))))
 
 ;;; Swank
 (defun cccp-swank-length (body)
@@ -166,6 +170,8 @@ broken. Use at your own risk."
     (make-local-variable 'cccp-last-before-change)
 
     ;; Sign up to receive notification of changes to the buffer
+    (make-local-variable 'before-change-functions)
+    (make-local-variable 'after-change-functions)
     (add-to-list 'before-change-functions 'cccp-before-change)
     (add-to-list 'after-change-functions 'cccp-after-change)))
 
