@@ -110,9 +110,17 @@ would return (((a b c) (d e f)) . \"00002f(a b\""
 ;; Handle incoming traffic from the agent
 (defvar cccp-pending-input "")
 
+(defun cccp-edit-file (file-name edits)
+  (cccp-debug "Editing %s with %S" file-name edits))
+
 (defun cccp-agent-dispatch (forms)
   "Dispatches FORMS received from agent."
-  (cccp-debug "Dispatching %S" forms))
+  (cccp-debug "Dispatching %S" forms)
+  (dolist (command forms)
+    ;; (swank:edit-file "foo.txt" (:retain 3 :delete "foo" :insert "bar" :retain 7))
+    (if (string= 'swank:edit-file (first command))
+        (cccp-edit-file (second commmand) (third command))
+      (cccp-debug "Unable to dispatch command %S" command))))
 
 (defun cccp-agent-filter (agent data)
   (cccp-debug "Received data from agent: %s" data)
