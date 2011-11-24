@@ -22,7 +22,18 @@
      (message ,msg ,@args)))
 
 ;;; Handle buffer changes
-(defvar cccp-last-before-change nil)
+(defvar cccp-last-before-change nil
+  "Records the bit of the buffer that is about to change.
+
+Takes the form (BEG END TEXT), where BEG is the starting position
+of the imminent buffer change, END is the ending position, and
+TEXT is the text of the region in question.")
+
+(defvar cccp-edit-in-progress nil
+  "True when an edit received from the agent is being processed.
+
+We use this to suppress transmitting change notifications about
+changes that have come in from other people.")
 
 (defun cccp-compute-edits (pos buffer-size before-text after-text)
   "Compute the list of edits the current change represents.
@@ -45,17 +56,19 @@ AFTER-TEXT is the text after it was changed. This is the empty string on a delet
 
 (defun cccp-before-change (beg end)
   "Records the location of the change that is about to take place."
-  (setq cccp-last-before-change (list beg end (buffer-substring beg end))))
+  (unless cccp-edit-in-progress
+   (setq cccp-last-before-change (list beg end (buffer-substring beg end)))))
 
 (defun cccp-after-change (beg end len)
   "Records the location of the change that just happened."
-  (let ((before-text (third cccp-last-before-change))
-        (after-text (buffer-substring beg end)))
-    (cccp-debug "(beg end len) %S" (list beg end len))
-    (cccp-debug "cccp-last-before-change %S" cccp-last-before-change)
-    (cccp-debug "Text in buffer at position %d changed from '%s' to '%s'"
-                beg before-text after-text)
-    (cccp-debug "Computed changes: %S" (cccp-compute-edits beg (buffer-size) before-text after-text))))
+  (unless cccp-edit-in-progress
+   (let ((before-text (third cccp-last-before-change))
+         (after-text (buffer-substring beg end)))
+     (cccp-debug "(beg end len) %S" (list beg end len))
+     (cccp-debug "cccp-last-before-change %S" cccp-last-before-change)
+     (cccp-debug "Text in buffer at position %d changed from '%s' to '%s'"
+                 beg before-text after-text)
+     (cccp-debug "Computed changes: %S" (cccp-compute-edits beg (buffer-size) before-text after-text)))))
 
 ;;; Swank
 (defun cccp-swank-length (body)
@@ -127,24 +140,26 @@ POSITION matches TEXT: we just delete (length TEXT) characters."
 
 (defun cccp-edit-file (file-name edits &optional position)
   "Process a swank:edit-file command received from an agent."
-  ;; TODO: somehow deal with the fact that at some point we'll be
-  ;; receiving edits on multiple files
-  (unless position (cccp-debug "Editing %s with %S" file-name edits))
-  (when edits
-    ;; TODO: Supress the modifications we're about to do from
-    ;; generation modification messages.
-    (let ((position (or position 1)))
-      (case (first edits)
-        ((:retain)
-         (cccp-edit-file file-name (cddr edits) (+ position (second edits))))
-        ((:insert)
-         (progn
-           (cccp-insert-text (second edits) position)
-           (cccp-edit-file file-name (cddr edits) (+ position (length (second edits))))))
-        ((:delete)
-         (progn
-           (cccp-delete-text (second edits) position)
-           (cccp-edit-file file-name (cddr edits) position)))))))
+  ;; Supress the modifications we're about to do from generating
+  ;; modification messages, lest we go into an infinite loop and rip a
+  ;; hole in the space-time continuum.
+  (let ((cccp-edit-in-progress t))
+   ;; TODO: somehow deal with the fact that at some point we'll be
+   ;; receiving edits on multiple files
+   (unless position (cccp-debug "Editing %s with %S" file-name edits))
+   (when edits
+     (let ((position (or position 1)))
+       (case (first edits)
+         ((:retain)
+          (cccp-edit-file file-name (cddr edits) (+ position (second edits))))
+         ((:insert)
+          (progn
+            (cccp-insert-text (second edits) position)
+            (cccp-edit-file file-name (cddr edits) (+ position (length (second edits))))))
+         ((:delete)
+          (progn
+            (cccp-delete-text (second edits) position)
+            (cccp-edit-file file-name (cddr edits) position))))))))
 
 (defun cccp-agent-dispatch (forms)
   "Dispatches FORMS received from agent."
