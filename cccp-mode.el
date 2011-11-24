@@ -42,17 +42,18 @@ POS is the position where the change begins.
 BUFFER-SIZE is the size of the whole buffer after the change is made.
 BEFORE-TEXT is the text before it was changed. This is the empty string on an insert.
 AFTER-TEXT is the text after it was changed. This is the empty string on a delete."
-  (let ((before-length (length before-text))
-        (after-length (length after-text)))
-    (append
-     (when (< 1 pos) `(:retain ,(1- pos)))
-     (when (< 0 before-length) `(:delete ,before-text))
-     (when (< 0 after-length) `(:insert ,after-text))
-     ;; TODO: Deal with narrowing
-     ;; TODO: Is the right size to compute the one *after* all the edits?
-     (let ((remaining (- buffer-size (1- pos) after-length)))
-       (when (< 0 remaining)
-         (list ':retain remaining))))))
+  (unless (string= before-text after-text) ; Text property changes trigger this method
+    (let ((before-length (length before-text))
+          (after-length (length after-text)))
+      (append
+       (when (< 1 pos) `(:retain ,(1- pos)))
+       (when (< 0 before-length) `(:delete ,before-text))
+       (when (< 0 after-length) `(:insert ,after-text))
+       ;; TODO: Deal with narrowing
+       ;; TODO: Is the right size to compute the one *after* all the edits?
+       (let ((remaining (- buffer-size (1- pos) after-length)))
+         (when (< 0 remaining)
+           (list ':retain remaining)))))))
 
 (defun cccp-before-change (beg end)
   "Records the location of the change that is about to take place."
@@ -70,8 +71,10 @@ AFTER-TEXT is the text after it was changed. This is the empty string on a delet
                  beg before-text after-text)
      (let ((cccp-edits (cccp-compute-edits beg (buffer-size) before-text after-text)))
        (cccp-debug "Computed changes: %S" cccp-edits)
-       (unless cccp-simulate-send
-         (cccp-send cccp-buffer-agent cccp-edits))))))
+       (when cccp-edits
+         (if cccp-simulate-send
+             (cccp-debug "Simulating enabled: Skipping actually sending to agent.")
+           (cccp-send cccp-buffer-agent cccp-edits)))))))
 
 ;;; Swank
 (defun cccp-swank-length (body)
@@ -276,6 +279,7 @@ broken. Use at your own risk."
     (add-to-list 'after-change-functions 'cccp-after-change)
 
     (make-local-variable 'cccp-pending-input)
+    (setq cccp-pending-input "")       ; Clean out any leftovers
 
     (make-local-variable 'cccp-buffer-agent)
 
