@@ -57,18 +57,21 @@ AFTER-TEXT is the text after it was changed. This is the empty string on a delet
 (defun cccp-before-change (beg end)
   "Records the location of the change that is about to take place."
   (unless cccp-edit-in-progress
-   (setq cccp-last-before-change (list beg end (buffer-substring beg end)))))
+   (setq cccp-last-before-change (list beg end (buffer-substring-no-properties beg end)))))
 
 (defun cccp-after-change (beg end len)
   "Records the location of the change that just happened."
   (unless cccp-edit-in-progress
    (let ((before-text (third cccp-last-before-change))
-         (after-text (buffer-substring beg end)))
+         (after-text (buffer-substring-no-properties beg end)))
      (cccp-debug "(beg end len) %S" (list beg end len))
      (cccp-debug "cccp-last-before-change %S" cccp-last-before-change)
      (cccp-debug "Text in buffer at position %d changed from '%s' to '%s'"
                  beg before-text after-text)
-     (cccp-debug "Computed changes: %S" (cccp-compute-edits beg (buffer-size) before-text after-text)))))
+     (let ((cccp-edits (cccp-compute-edits beg (buffer-size) before-text after-text)))
+       (cccp-debug "Computed changes: %S" cccp-edits)
+       (unless cccp-simulate-send
+         (cccp-send cccp-buffer-agent cccp-edits))))))
 
 ;;; Swank
 (defun cccp-swank-length (body)
@@ -218,10 +221,13 @@ span the entire file, even if that means having a :retain at the
 end."
   (cccp-send agent `(swank:edit-file ,file-name ,edits)))
 
-
 (defun cccp-agent-shutdown (agent)
   "Sends the shutdown message to the agent."
   (cccp-send agent `(swank:shutdown)))
+
+;;; Hold on to the agent for this buffer
+(defvar cccp-buffer-agent nil
+  "The agent with which this buffer is associated.")
 
 ;;; Minor mode setup
 (defvar cccp-mode-map (make-sparse-keymap)
@@ -252,7 +258,9 @@ broken. Use at your own risk."
   ;; change notifications any more
   (when (not cccp-mode)
     (setq before-change-functions (remove 'cccp-before-change before-change-functions))
-    (setq after-change-functions (remove 'cccp-after-change after-change-functions)))
+    (setq after-change-functions (remove 'cccp-after-change after-change-functions))
+    (cccp-agent-disconnect cccp-buffer-agent)
+    (setq cccp-buffer-agent nil))
 
   ;; Setup for when we're turning cccp-mode on
   (when cccp-mode
@@ -267,6 +275,11 @@ broken. Use at your own risk."
     (add-to-list 'before-change-functions 'cccp-before-change)
     (add-to-list 'after-change-functions 'cccp-after-change)
 
-    (make-local-variable 'cccp-pending-input)))
+    (make-local-variable 'cccp-pending-input)
+
+    (make-local-variable 'cccp-buffer-agent)
+
+    (setq cccp-buffer-agent
+          (cccp-agent-connect (string-to-number (read-from-minibuffer "Port: "))))))
 
 (provide 'cccp-mode)
