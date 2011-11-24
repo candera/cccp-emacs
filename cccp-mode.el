@@ -110,8 +110,41 @@ would return (((a b c) (d e f)) . \"00002f(a b\""
 ;; Handle incoming traffic from the agent
 (defvar cccp-pending-input "")
 
-(defun cccp-edit-file (file-name edits)
-  (cccp-debug "Editing %s with %S" file-name edits))
+(defun cccp-insert-text (text position)
+  "Insert TEXT into the current buffer at POSITION."
+  (save-excursion
+    (goto-char position)
+    (insert text)))
+
+(defun cccp-delete-text (text position)
+  "Delete TEXT from the current buffer at POSITION.
+
+Currently, no verification is done as to whether the text at
+POSITION matches TEXT: we just delete (length TEXT) characters."
+  (save-excursion
+    (goto-char position)
+    (delete-char (length text))))
+
+(defun cccp-edit-file (file-name edits &optional position)
+  "Process a swank:edit-file command received from an agent."
+  ;; TODO: somehow deal with the fact that at some point we'll be
+  ;; receiving edits on multiple files
+  (unless position (cccp-debug "Editing %s with %S" file-name edits))
+  (when edits
+    ;; TODO: Supress the modifications we're about to do from
+    ;; generation modification messages.
+    (let ((position (or position 1)))
+      (case (first edits)
+        ((:retain)
+         (cccp-edit-file file-name (cddr edits) (+ position (second edits))))
+        ((:insert)
+         (progn
+           (cccp-insert-text (second edits) position)
+           (cccp-edit-file file-name (cddr edits) (+ position (length (second edits))))))
+        ((:delete)
+         (progn
+           (cccp-delete-text (second edits) position)
+           (cccp-edit-file file-name (cddr edits) position)))))))
 
 (defun cccp-agent-dispatch (forms)
   "Dispatches FORMS received from agent."
