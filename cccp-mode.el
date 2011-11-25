@@ -13,7 +13,7 @@
 
 ;;; Def true for debugging
 (defvar cccp-debug-level t)
-(defvar cccp-simultate-send nil)        ; Bind to t to prevent sending
+(defvar cccp-simulate-send nil)        ; Bind to t to prevent sending
                                         ; anything: only debug output
                                         ; will be produced
 
@@ -74,7 +74,7 @@ AFTER-TEXT is the text after it was changed. This is the empty string on a delet
        (when cccp-edits
          (if cccp-simulate-send
              (cccp-debug "Simulating enabled: Skipping actually sending to agent.")
-           (cccp-send cccp-buffer-agent cccp-edits)))))))
+           (cccp-send cccp-agent cccp-edits)))))))
 
 ;;; Swank
 (defun cccp-swank-length (body)
@@ -127,10 +127,11 @@ would return (((a b c) (d e f)) . \"00002f(a b\""
 ;;; Agent interaction
 
 ;; Handle incoming traffic from the agent
-(defvar cccp-pending-input "")
+(defvar cccp-agent-pending-input "")
 
 (defun cccp-insert-text (text position)
   "Insert TEXT into the current buffer at POSITION."
+  (cccp-debug "Inserting %s at %d" text position)
   (save-excursion
     (goto-char position)
     (insert text)))
@@ -140,6 +141,7 @@ would return (((a b c) (d e f)) . \"00002f(a b\""
 
 Currently, no verification is done as to whether the text at
 POSITION matches TEXT: we just delete (length TEXT) characters."
+  (cccp-debug "Deleting %s at %d" text position)
   (save-excursion
     (goto-char position)
     (delete-char (length text))))
@@ -156,16 +158,17 @@ POSITION matches TEXT: we just delete (length TEXT) characters."
    (when edits
      (let ((position (or position 1)))
        (case (first edits)
-         ((:retain)
+         (:retain
           (cccp-edit-file file-name (cddr edits) (+ position (second edits))))
-         ((:insert)
-          (progn
-            (cccp-insert-text (second edits) position)
-            (cccp-edit-file file-name (cddr edits) (+ position (length (second edits))))))
-         ((:delete)
-          (progn
-            (cccp-delete-text (second edits) position)
-            (cccp-edit-file file-name (cddr edits) position))))))))
+         (:insert
+          (cccp-insert-text (second edits) position)
+          (cccp-edit-file file-name (cddr edits) (+ position (length (second edits)))))
+         (:delete
+          (cccp-delete-text (second edits) position)
+          (cccp-edit-file file-name (cddr edits) position))
+         (otherwise
+          (cccp-debug "Unable to process edit command %S"
+                      (first edits))))))))
 
 (defun cccp-agent-dispatch (forms)
   "Dispatches FORMS received from agent."
@@ -178,9 +181,9 @@ POSITION matches TEXT: we just delete (length TEXT) characters."
 
 (defun cccp-agent-filter (agent data)
   (cccp-debug "Received data from agent: %s" data)
-  (setq cccp-pending-input (concat cccp-pending-input data))
-  (let ((parsed-input (cccp-swank-decode cccp-pending-input)))
-    (setq cccp-pending-input (cdr parsed-input))
+  (setq cccp-agent-pending-input (concat cccp-agent-pending-input data))
+  (let ((parsed-input (cccp-swank-decode cccp-agent-pending-input)))
+    (setq cccp-agent-pending-input (cdr parsed-input))
     (when (car parsed-input)
       (cccp-agent-dispatch (car parsed-input)))))
 
@@ -228,9 +231,8 @@ end."
   "Sends the shutdown message to the agent."
   (cccp-send agent `(swank:shutdown)))
 
-;;; Hold on to the agent for this buffer
-(defvar cccp-buffer-agent nil
-  "The agent with which this buffer is associated.")
+(defvar cccp-agent nil
+  "The agent with which this emacs is associated.")
 
 ;;; Minor mode setup
 (defvar cccp-mode-map (make-sparse-keymap)
@@ -261,9 +263,7 @@ broken. Use at your own risk."
   ;; change notifications any more
   (when (not cccp-mode)
     (setq before-change-functions (remove 'cccp-before-change before-change-functions))
-    (setq after-change-functions (remove 'cccp-after-change after-change-functions))
-    (cccp-agent-disconnect cccp-buffer-agent)
-    (setq cccp-buffer-agent nil))
+    (setq after-change-functions (remove 'cccp-after-change after-change-functions)))
 
   ;; Setup for when we're turning cccp-mode on
   (when cccp-mode
@@ -278,12 +278,14 @@ broken. Use at your own risk."
     (add-to-list 'before-change-functions 'cccp-before-change)
     (add-to-list 'after-change-functions 'cccp-after-change)
 
-    (make-local-variable 'cccp-pending-input)
-    (setq cccp-pending-input "")       ; Clean out any leftovers
+    (unless cccp-agent
+      (setq cccp-agent
+            ;; TODO: replace this with code that starts the agent and
+            ;; figures out what port it's running on
+           (cccp-agent-connect (string-to-number (read-from-minibuffer "Port: "))))
+      (setq cccp-agent-pending-input ""))
 
-    (make-local-variable 'cccp-buffer-agent)
-
-    (setq cccp-buffer-agent
-          (cccp-agent-connect (string-to-number (read-from-minibuffer "Port: "))))))
+    ;; TODO: link current buffer to agent
+    ))
 
 (provide 'cccp-mode)
