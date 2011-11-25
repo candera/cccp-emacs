@@ -146,7 +146,7 @@ POSITION matches TEXT: we just delete (length TEXT) characters."
     (goto-char position)
     (delete-char (length text))))
 
-(defun cccp-edit-file (file-name edits &optional position)
+(defun cccp-edit-file (edits &optional position)
   "Process a swank:edit-file command received from an agent."
   ;; Supress the modifications we're about to do from generating
   ;; modification messages, lest we go into an infinite loop and rip a
@@ -159,13 +159,13 @@ POSITION matches TEXT: we just delete (length TEXT) characters."
      (let ((position (or position 1)))
        (case (first edits)
          (:retain
-          (cccp-edit-file file-name (cddr edits) (+ position (second edits))))
+          (cccp-edit-file (cddr edits) (+ position (second edits))))
          (:insert
           (cccp-insert-text (second edits) position)
-          (cccp-edit-file file-name (cddr edits) (+ position (length (second edits)))))
+          (cccp-edit-file (cddr edits) (+ position (length (second edits)))))
          (:delete
           (cccp-delete-text (second edits) position)
-          (cccp-edit-file file-name (cddr edits) position))
+          (cccp-edit-file (cddr edits) position))
          (otherwise
           (cccp-debug "Unable to process edit command %S"
                       (first edits))))))))
@@ -176,7 +176,9 @@ POSITION matches TEXT: we just delete (length TEXT) characters."
   (dolist (command forms)
     ;; (swank:edit-file "foo.txt" (:retain 3 :delete "foo" :insert "bar" :retain 7))
     (if (string= 'swank:edit-file (first command))
-        (cccp-edit-file (second commmand) (third command))
+        (save-excursion
+          (set-buffer (get-buffer (second command)))
+          (cccp-edit-file (third command)))
       (cccp-debug "Unable to dispatch command %S" command))))
 
 (defun cccp-agent-filter (agent data)
@@ -234,6 +236,13 @@ end."
 (defvar cccp-agent nil
   "The agent with which this emacs is associated.")
 
+(defvar cccp-agent-current-id 0
+  "Keeps track of the current ID we're using with `cccp-agent-next-id`.")
+
+(defun cccp-agent-next-id ()
+  "Return an ID suitable for calling cccp-agent-link-file with."
+  (setq cccp-agent-current-id (1+ cccp-agent-current-id)))
+
 ;;; Minor mode setup
 (defvar cccp-mode-map (make-sparse-keymap)
   "Keymap for cccp-mode.")
@@ -282,10 +291,11 @@ broken. Use at your own risk."
       (setq cccp-agent
             ;; TODO: replace this with code that starts the agent and
             ;; figures out what port it's running on
-           (cccp-agent-connect (string-to-number (read-from-minibuffer "Port: "))))
+           (cccp-agent-connect (string-to-number (read-from-minibuffer "Agent Port: "))))
       (setq cccp-agent-pending-input ""))
 
-    ;; TODO: link current buffer to agent
-    ))
+    ;; TODO: Set up to communicate with the server
+
+    (cccp-agent-link-file cccp-agent (cccp-agent-next-id) (buffer-name))))
 
 (provide 'cccp-mode)
