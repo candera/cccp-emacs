@@ -200,7 +200,7 @@ POSITION matches TEXT: we just delete (length TEXT) characters."
   "Sends the s-expression sexp to the cccp-agent agent."
   (let ((msg (cccp-swank-encode sexp)))
     (cccp-debug (format "Sending message: %s" msg))
-    (unless cccp-simultate-send
+    (unless cccp-simulate-send
       (process-send-string agent msg))))
 
 (defun cccp-agent-disconnect (agent)
