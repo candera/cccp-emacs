@@ -42,18 +42,22 @@ POS is the position where the change begins.
 BUFFER-SIZE is the size of the whole buffer after the change is made.
 BEFORE-TEXT is the text before it was changed. This is the empty string on an insert.
 AFTER-TEXT is the text after it was changed. This is the empty string on a delete."
-  (unless (string= before-text after-text) ; Text property changes trigger this method
+  ;; Text property changes trigger this method, even though the text
+  ;; itself hasn't changed. This can happen, e.g., during
+  ;; fontification. But for purposes of collaboration, we only care
+  ;; about the text.
+  (unless (string= before-text after-text)
     (let ((before-length (length before-text))
           (after-length (length after-text)))
-      (append
-       (when (< 1 pos) `(:retain ,(1- pos)))
-       (when (< 0 before-length) `(:delete ,before-text))
-       (when (< 0 after-length) `(:insert ,after-text))
-       ;; TODO: Deal with narrowing
-       ;; TODO: Is the right size to compute the one *after* all the edits?
-       (let ((remaining (- buffer-size (1- pos) after-length)))
-         (when (< 0 remaining)
-           (list ':retain remaining)))))))
+      (list ':swank-rpc
+            (append
+             (when (< 1 pos) `(:retain ,(1- pos)))
+             (when (< 0 before-length) `(:delete ,before-text))
+             (when (< 0 after-length) `(:insert ,after-text))
+             ;; TODO: Deal with narrowing
+             (let ((remaining (- buffer-size (1- pos) after-length)))
+               (when (< 0 remaining)
+                 (list ':retain remaining))))))))
 
 (defun cccp-before-change (beg end)
   "Records the location of the change that is about to take place."
