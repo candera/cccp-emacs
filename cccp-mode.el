@@ -292,10 +292,11 @@ broken. Use at your own risk."
     (add-to-list 'after-change-functions 'cccp-after-change)
 
     (unless cccp-agent
-      (setq cccp-agent
-            ;; TODO: replace this with code that starts the agent and
-            ;; figures out what port it's running on
-           (cccp-agent-connect (string-to-number (read-from-minibuffer "Agent Port: "))))
+      (unless cccp-simulate-send
+        (setq cccp-agent
+              ;; TODO: replace this with code that starts the agent and
+              ;; figures out what port it's running on
+              (cccp-agent-connect (string-to-number (read-from-minibuffer "Agent Port: ")))))
       (setq cccp-agent-pending-input ""))
 
     ;; TODO: Set up to communicate with the server
