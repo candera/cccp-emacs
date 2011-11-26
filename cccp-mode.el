@@ -154,7 +154,7 @@ POSITION matches TEXT: we just delete (length TEXT) characters."
   (let ((cccp-edit-in-progress t))
    ;; TODO: somehow deal with the fact that at some point we'll be
    ;; receiving edits on multiple files
-   (unless position (cccp-debug "Editing %s with %S" file-name edits))
+   (unless position (cccp-debug "Editing %s with %S" (buffer-name) edits))
    (when edits
      (let ((position (or position 1)))
        (case (first edits)
