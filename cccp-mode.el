@@ -261,7 +261,7 @@ end."
 
 (defun cccp-agent-next-id ()
   "Return an ID suitable for calling cccp-agent-link-file with."
-  (setq cccp-agent-current-id (1+ cccp-agent-current-id)))
+  (number-to-string (setq cccp-agent-current-id (1+ cccp-agent-current-id))))
 
 ;;; Minor mode setup
 (defvar cccp-mode-map (make-sparse-keymap)
