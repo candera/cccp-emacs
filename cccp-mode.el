@@ -77,8 +77,8 @@ AFTER-TEXT is the text after it was changed. This is the empty string on a delet
        (cccp-debug "Computed changes: %S" cccp-edits)
        (when cccp-edits
          (if cccp-simulate-send
-             (cccp-debug "Simulating enabled: Skipping actually sending to agent.")
-           (cccp-send cccp-agent cccp-edits)))))))
+             (cccp-debug "Simulating enabled: Not actually sending to agent.")
+           (cccp-edit-file cccp-agent cccp-edits)))))))
 
 ;;; Swank
 (defun cccp-swank-length (body)
@@ -207,21 +207,25 @@ POSITION matches TEXT: we just delete (length TEXT) characters."
     (unless cccp-simulate-send
       (process-send-string agent msg))))
 
+(defun cccp-swank-rpc (agent sexp)
+  "Sends the swank command `sexp` to the cccp-agent `agent`."
+  (cccp-send agent (list :swank-rpc sexp)))
+
 (defun cccp-agent-disconnect (agent)
   "Closes the connection to the cccp agent"
   (delete-process agent))
 
 (defun cccp-agent-init-server-connection (agent protocol host port)
   "Initializes the agent's connection with the server."
-  (cccp-send agent `(swank:init-connection (:protocol ,protocol :host ,host :port ,port))))
+  (cccp-swank-rpc agent `(swank:init-connection (:protocol ,protocol :host ,host :port ,port))))
 
 (defun cccp-agent-link-file (agent id file-name)
   "Registers changes made for the given id/file-name for synchronization via the server"
-  (cccp-send agent `(swank:link-file ,id ,file-name)))
+  (cccp-swank-rpc agent `(swank:link-file ,id ,file-name)))
 
 (defun cccp-agent-unlink-file (agent file-name)
   "Deregisters changes made for the given file-name from syncrhonization via the server."
-  (cccp-send agent `(swank:unlink-file ,file-name)))
+  (cccp-swank-rpc agent `(swank:unlink-file ,file-name)))
 
 (defun cccp-agent-edit-file (agent file-name &rest edits)
   "Sends the specified edits to `file-name` to the agent.
@@ -231,11 +235,11 @@ of :retain, :insert, or :delete, as specified by
 https://github.com/djspiewak/cccp/. Note that the edit list must
 span the entire file, even if that means having a :retain at the
 end."
-  (cccp-send agent `(swank:edit-file ,file-name ,edits)))
+  (cccp-swank-rpc agent `(swank:edit-file ,file-name ,edits)))
 
 (defun cccp-agent-shutdown (agent)
   "Sends the shutdown message to the agent."
-  (cccp-send agent `(swank:shutdown)))
+  (cccp-swank-rpc agent `(swank:shutdown)))
 
 (defvar cccp-agent nil
   "The agent with which this emacs is associated.")
