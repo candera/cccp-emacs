@@ -207,9 +207,19 @@ POSITION matches TEXT: we just delete (length TEXT) characters."
     (unless cccp-simulate-send
       (process-send-string agent msg))))
 
+(defvar cccp-swank-rpc-id 0
+  "The ID of the current swank RPC.
+
+Swank calls needs to have a unique ID. We use this variable to
+record it.")
+
+(defun cccp-next-swank-rpc-id ()
+  "Return a unique ID suitable for use in a swank RPC."
+  (setq cccp-swank-rpc-id (1+ cccp-swank-rpc-id)))
+
 (defun cccp-swank-rpc (agent sexp)
   "Sends the swank command `sexp` to the cccp-agent `agent`."
-  (cccp-send agent (list :swank-rpc sexp)))
+  (cccp-send agent (list :swank-rpc sexp (cccp-next-swank-rpc-id))))
 
 (defun cccp-agent-disconnect (agent)
   "Closes the connection to the cccp agent"
