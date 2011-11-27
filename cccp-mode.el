@@ -78,7 +78,7 @@ AFTER-TEXT is the text after it was changed. This is the empty string on a delet
        (when cccp-edits
          (if cccp-simulate-send
              (cccp-debug "Simulating enabled: Not actually sending to agent.")
-           (cccp-edit-file cccp-agent cccp-edits)))))))
+           (cccp-agent-edit-file cccp-agent cccp-edits)))))))
 
 ;;; Swank
 (defun cccp-swank-length (body)
@@ -150,6 +150,8 @@ POSITION matches TEXT: we just delete (length TEXT) characters."
     (goto-char position)
     (delete-char (length text))))
 
+;; TODO: Think of a better name for this, or for cccp-agent-edit-file
+;; below, since they are confusingly similar.
 (defun cccp-edit-file (edits &optional position)
   "Process a swank:edit-file command received from an agent."
   ;; Supress the modifications we're about to do from generating
