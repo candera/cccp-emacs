@@ -13,7 +13,7 @@
 
 ;;; Def true for debugging
 (defvar cccp-debug-level t)
-(defvar cccp-simulate-send nil)        ; Bind to t to prevent sending
+(defvar cccp-simulate-send nil)         ; Bind to t to prevent sending
                                         ; anything: only debug output
                                         ; will be produced
 
@@ -49,15 +49,14 @@ AFTER-TEXT is the text after it was changed. This is the empty string on a delet
   (unless (string= before-text after-text)
     (let ((before-length (length before-text))
           (after-length (length after-text)))
-      (list ':swank-rpc
-            (append
-             (when (< 1 pos) `(:retain ,(1- pos)))
-             (when (< 0 before-length) `(:delete ,before-text))
-             (when (< 0 after-length) `(:insert ,after-text))
-             ;; TODO: Deal with narrowing
-             (let ((remaining (- buffer-size (1- pos) after-length)))
-               (when (< 0 remaining)
-                 (list ':retain remaining))))))))
+      (append
+       (when (< 1 pos) (list :retain (1- pos)))
+       (when (< 0 before-length) (list :delete before-text))
+       (when (< 0 after-length) (list :insert after-text))
+       ;; TODO: Deal with narrowing
+       (let ((remaining (- buffer-size (1- pos) after-length)))
+         (when (< 0 remaining)
+           (list :retain remaining)))))))
 
 (defun cccp-before-change (beg end)
   "Records the location of the change that is about to take place."
@@ -78,7 +77,7 @@ AFTER-TEXT is the text after it was changed. This is the empty string on a delet
        (when cccp-edits
          (if cccp-simulate-send
              (cccp-debug "Simulating enabled: Not actually sending to agent.")
-           (cccp-agent-edit-file cccp-agent cccp-edits)))))))
+           (cccp-agent-edit-file cccp-agent (buffer-name) cccp-edits)))))))
 
 ;;; Swank
 (defun cccp-swank-length (body)
@@ -181,7 +180,7 @@ POSITION matches TEXT: we just delete (length TEXT) characters."
   (cccp-debug "Dispatching %S" forms)
   (dolist (command forms)
     ;; (swank:edit-file "foo.txt" (:retain 3 :delete "foo" :insert "bar" :retain 7))
-    (if (string= 'swank:edit-file (first command))
+    (if (string= :edit-performed (first command))
         (save-excursion
           (set-buffer (get-buffer (second command)))
           (cccp-edit-file (third command)))
@@ -239,11 +238,11 @@ record it.")
   "Deregisters changes made for the given file-name from syncrhonization via the server."
   (cccp-swank-rpc agent `(swank:unlink-file ,file-name)))
 
-(defun cccp-agent-edit-file (agent file-name &rest edits)
+(defun cccp-agent-edit-file (agent file-name edits)
   "Sends the specified edits to `file-name` to the agent.
 
-Edits must be pairs of the form TYPE VALE, where TYPE is one
-of :retain, :insert, or :delete, as specified by
+Edits must be a list of pairs of the form TYPE VALE, where TYPE
+is one of :retain, :insert, or :delete, as specified by
 https://github.com/djspiewak/cccp/. Note that the edit list must
 span the entire file, even if that means having a :retain at the
 end."
@@ -313,10 +312,12 @@ broken. Use at your own risk."
               ;; TODO: replace this with code that starts the agent and
               ;; figures out what port it's running on
               (cccp-agent-connect (string-to-number (read-from-minibuffer "Agent Port: ")))))
-      (setq cccp-agent-pending-input ""))
+      (setq cccp-agent-pending-input "")
+      ;; TODO: stop hardcoding this at some point
+      (cccp-agent-init-server-connection cccp-agent "http" "localhost" 8585))
 
     ;; TODO: Set up to communicate with the server
 
-    (cccp-agent-link-file cccp-agent (cccp-agent-next-id) (buffer-name))))
+    (cccp-agent-link-file cccp-agent (buffer-name) (buffer-name))))
 
 (provide 'cccp-mode)
