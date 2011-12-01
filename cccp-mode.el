@@ -85,11 +85,11 @@ AFTER-TEXT is the text after it was changed. This is the empty string on a delet
   (format "%06x" (length body)))
 
 (defun cccp-swank-decode-length (input)
-  "Turn the six-digit hex numeric string `input` into a number"
+  "Turn the six-digit hex numeric string INPUT into a number"
   (string-to-number input 16))
 
 (defun cccp-sexp-to-string (sexp)
-  "Turns an s-sexpression into a string suitable for transmission via swank."
+  "Turn s-expression SEXP into a string suitable for transmission via swank."
   (with-temp-buffer
     (let (print-escape-nonascii         ; Don't escape non-ASCII
           print-escape-newlines         ; Don't escape newlines
@@ -104,13 +104,13 @@ AFTER-TEXT is the text after it was changed. This is the empty string on a delet
     (concat (cccp-swank-length body) body)))
 
 (defun cccp-swank-decode (input &optional forms)
-  "Parses input, returning (PARSED . REMAINING).
+  "Parse INPUT and return (PARSED . REMAINING).
 
 PARSED is a list consisting of FORMS prepended to the of objects
 parsed from the input.
 REMAINING in the unparseable remainder.
 
-So, for example, `(cccp-dispatch \"000007(a b c)000007(d e f)00002f(a b\")`
+So, for example, '(cccp-dispatch \"000007(a b c)000007(d e f)00002f(a b\")'
 would return (((a b c) (d e f)) . \"00002f(a b\""
 
   ;; If we don't have at least six characters (the length), there's
@@ -195,7 +195,7 @@ POSITION matches TEXT: we just delete (length TEXT) characters."
       (cccp-agent-dispatch (car parsed-input)))))
 
 (defun cccp-agent-connect (port)
-  "Opens a connection to the cccp agent and returs it."
+  "Opens a connection to the cccp agent and returns it."
   (let ((agent (open-network-stream "cccp-agent" nil "localhost" port)))
     (set-process-filter agent 'cccp-agent-filter)
     ;; TODO: cccp-agent-init-server-connection here?
@@ -219,7 +219,7 @@ record it.")
   (setq cccp-swank-rpc-id (1+ cccp-swank-rpc-id)))
 
 (defun cccp-swank-rpc (agent sexp)
-  "Sends the swank command `sexp` to the cccp-agent `agent`."
+  "Sends the swank command SEXP to the cccp-agent AGENT."
   (cccp-send agent (list :swank-rpc sexp (cccp-next-swank-rpc-id))))
 
 (defun cccp-agent-disconnect (agent)
@@ -239,9 +239,9 @@ record it.")
   (cccp-swank-rpc agent `(swank:unlink-file ,file-name)))
 
 (defun cccp-agent-edit-file (agent file-name edits)
-  "Sends the specified edits to `file-name` to the agent.
+  "Sends the specified EDITS to FILE-NAME to agent AGENT.
 
-Edits must be a list of pairs of the form TYPE VALE, where TYPE
+Edits must be a list of pairs of the form TYPE VALUE, where TYPE
 is one of :retain, :insert, or :delete, as specified by
 https://github.com/djspiewak/cccp/. Note that the edit list must
 span the entire file, even if that means having a :retain at the
@@ -256,7 +256,7 @@ end."
   "The agent with which this emacs is associated.")
 
 (defvar cccp-agent-current-id 0
-  "Keeps track of the current ID we're using with `cccp-agent-next-id`.")
+  "Keeps track of the current ID we're using with `cccp-agent-next-id'.")
 
 (defun cccp-agent-next-id ()
   "Return an ID suitable for calling cccp-agent-link-file with."
