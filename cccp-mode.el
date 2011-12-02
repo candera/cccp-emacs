@@ -327,9 +327,6 @@ Starts a new session if one has not yet been started. See `cccp-start-session'."
   (interactive)
   (message "Not yet implemented."))
 
-(defvar cccp-session nil
-  "The CCCP session.")
-
 (defcustom cccp-agent-path nil
   "Full path to the CCCP agent executable"
   :type 'file
@@ -347,26 +344,35 @@ Starts a new session if one has not yet been started. See `cccp-start-session'."
       (goto-char (point-min))
       (read (current-buffer)))))
 
-(defun cccp-agent-attempt-connect (path retries &optional attempt)
+(defun cccp-agent-attempt-connect (host port path retries &optional attempt)
   "Try to connect to the agent whose port is listed in PATH.
 Try for at most RETRIES times."
   (let ((attempt (or attempt 1)))
     (unless (active-minibuffer-window)
       (message "Polling %S%s" path (make-string (/ attempt 3) ?.)))
     (cond ((and (file-exists-p path) (> (cccp-file-size path) 0))
-           (setq cccp-agent (cccp-agent-connect (cccp-read-port path))))
+           (setq cccp-agent (cccp-agent-connect (cccp-read-port path)))
+           (cccp-agent-init-server-connection cccp-agent "http" host port)
+           (message "Agent connected!"))
           ((> retries attempt)
-           (run-with-timer 0.3 nil #'cccp-agent-attempt-connect path retries (1+ attempt)))
+           (run-with-timer 0.3 nil #'cccp-agent-attempt-connect host port path retries (1+ attempt)))
           (t (message "Unable to connect to agent within specified number of retries")))))
 
-(defun cccp-agent-launch ()
-  "Launches a new instance of the CCCP agent."
-  (let* ((cccp-agent-path (or cccp-agent-path (read-file-name "Path to agent:")))
+(defun cccp-agent-launch (host port)
+  "Launch a CCCP agent and connect it to the server at HOST:PORT."
+  (let* ((cccp-agent-path (expand-file-name (or cccp-agent-path (read-file-name "Path to agent: "))))
          (cccp-agent-port-path (concat (file-name-as-directory temporary-file-directory) "agent.port")))
+    (cccp-debug "Attempting to launch %s %s" cccp-agent-path cccp-agent-port-path)
     (when (file-exists-p cccp-agent-port-path)
       (delete-file cccp-agent-port-path))
-    (start-process "CCCP Agent" "CCCP Agent Process" cccp-agent-path cccp-agent-port-path)
-    (cccp-agent-attempt-connect cccp-agent-port-path 10 1)))
+    (start-process "CCCP Agent" "*cccp-agent*" cccp-agent-path cccp-agent-port-path)
+    (cccp-agent-attempt-connect host port cccp-agent-port-path 30 1)))
+
+(defun cccp-agent-shutdown ()
+  "Terminate the existing instance of the CCCP agent."
+  (delete-process "CCCP Agent")
+  (kill-buffer (get-buffer "*cccp-agent*"))
+  (setq cccp-agent nil))
 
 (defun cccp-start-session ()
   "Start a new CCCP collaboration session.
@@ -374,8 +380,17 @@ Try for at most RETRIES times."
 Launches a cccp agent instance and connects it to a server. Use
 `cccp-link-buffer' to add buffers to the session."
   (interactive)
-  (if cccp-session
+  (if cccp-agent
       (message "CCCP session has already been started.")
-    (cccp-agent-launch)))
+    (cccp-agent-launch
+     (read-from-minibuffer "Server Host: " "localhost")
+     (string-to-number (read-from-minibuffer "Server Port: " "8585")))))
+
+(defun cccp-end-session ()
+  "End the existing CCCP collaboration session."
+  (interactive)
+  (if cccp-agent
+      (cccp-agent-shutdown)
+    (message "There is no existing CCCP collaboration session.")))
 
 (provide 'cccp-mode)
