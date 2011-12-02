@@ -269,17 +269,22 @@ end."
 (define-minor-mode cccp-mode
   "Toggle cccp-mode, a minor mode for connecting to a CCCP server.
 
-CCCP is the Common Collaborative Coding Protocol.
-With no argument, this command toggles the mode. Non-null prefix
-argument turns on the mode. Null prefix argument turns off the
-mode.
+CCCP is the Common Collaborative Coding Protocol. With no
+argument, this command toggles the mode. Non-null prefix argument
+turns on the mode. Null prefix argument turns off the mode.
 
 When cccp-mode is enabled, edits in the buffer will be sent to
 other colloborators via the CCCP server, and edits received from
 the CCCP server will be applied to the buffer.
 
-Note that cccp-mode is currently pre-alpha, i.e. completely
-broken. Use at your own risk."
+You probably shouldn't be turning this mode on and off yourself.
+Instead, use `cccp-start-session', `cccp-link-buffer', and
+`cccp-unlink-buffer'. Turning cccp-mode off will disable CCCP
+from receiving change notifications, which is probably not what
+you want to happen.
+
+Note that cccp-mode is currently pre-alpha, i.e. mostly broken.
+Use at your own risk."
 
   ;; The indicator for the mode line.
   :lighter " CCCP"
@@ -296,7 +301,7 @@ broken. Use at your own risk."
   ;; Setup for when we're turning cccp-mode on
   (when cccp-mode
     ;; Set up the key bindings
-    (define-key cccp-mode-map (kbd "C-c /") 'cccp-display-history)
+    ;; (define-key cccp-mode-map (kbd "C-c /") 'cccp-display-history)
 
     (make-local-variable 'cccp-last-before-change)
 
@@ -304,21 +309,7 @@ broken. Use at your own risk."
     (make-local-variable 'before-change-functions)
     (make-local-variable 'after-change-functions)
     (add-to-list 'before-change-functions 'cccp-before-change)
-    (add-to-list 'after-change-functions 'cccp-after-change)
-
-    (unless cccp-agent
-      (unless cccp-simulate-send
-        (setq cccp-agent
-              ;; TODO: replace this with code that starts the agent and
-              ;; figures out what port it's running on
-              (cccp-agent-connect (string-to-number (read-from-minibuffer "Agent Port: ")))))
-      (setq cccp-agent-pending-input "")
-      ;; TODO: stop hardcoding this at some point
-      (cccp-agent-init-server-connection cccp-agent "http" "localhost" 8585))
-
-    ;; TODO: Set up to communicate with the server
-
-    (cccp-agent-link-file cccp-agent (buffer-name) (buffer-name))))
+    (add-to-list 'after-change-functions 'cccp-after-change)))
 
 (defun cccp-link-buffer ()
   "Link the current buffer to the existing CCCP session.
@@ -361,7 +352,9 @@ Try for at most RETRIES times."
 (defun cccp-agent-launch (host port)
   "Launch a CCCP agent and connect it to the server at HOST:PORT."
   (let* ((cccp-agent-path (expand-file-name (or cccp-agent-path (read-file-name "Path to agent: "))))
-         (cccp-agent-port-path (concat (file-name-as-directory temporary-file-directory) "agent.port")))
+         (cccp-agent-port-path (concat (file-name-as-directory temporary-file-directory)
+                                       "agent.port."
+                                       (number-to-string (emacs-pid)))))
     (cccp-debug "Attempting to launch %s %s" cccp-agent-path cccp-agent-port-path)
     (when (file-exists-p cccp-agent-port-path)
       (delete-file cccp-agent-port-path))
@@ -392,5 +385,33 @@ Launches a cccp agent instance and connects it to a server. Use
   (if cccp-agent
       (cccp-agent-shutdown)
     (message "There is no existing CCCP collaboration session.")))
+
+(defun cccp-get-id ()
+  "Return an ID suitable for passing to `cccp-agent-link-file'."
+  (unless cccp-agent
+    (error "No CCCP session has been started. Run `cccp-start-session' to create one."))
+  (let ((id (read-from-minibuffer (format "Document ID (default '%s'): " (buffer-name)))))
+    (if (zerop (length id))
+      (buffer-name)
+      id)))
+
+(defun cccp-link-buffer (id)
+  "Link the current buffer with the CCCP session under ID.
+
+The ID is how the document will be known to the server: this is
+the identifier you will use to collaborate on this buffer with
+another user."
+  (interactive (list (cccp-get-id)))
+  (unless cccp-agent
+    (error "No CCCP session has been started. Run `cccp-start-session' to create one."))
+  (cccp-agent-link-file cccp-agent id (buffer-name))
+  (cccp-mode t))
+
+(defun cccp-unlink-buffer ()
+  "Unlink the current buffer from the CCCP session."
+  (interactive)
+  (unless cccp-mode
+    (error "Buffer is not linked to a CCCP session."))
+  (cccp-mode nil))
 
 (provide 'cccp-mode)
