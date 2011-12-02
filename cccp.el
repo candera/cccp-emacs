@@ -6,8 +6,8 @@
 ;;
 ;; Put the following in your emacs init file:
 ;;
-;; (add-to-list 'load-path "/path/to/cccp-mode-directory")
-;; (require 'cccp-mode)
+;; (add-to-list 'load-path "/path/to/cccp-emacs-directory")
+;; (require 'cccp)
 ;;
 ;; TODO: Write usage information
 
@@ -393,4 +393,4 @@ Launches a cccp agent instance and connects it to a server. Use
       (cccp-agent-shutdown)
     (message "There is no existing CCCP collaboration session.")))
 
-(provide 'cccp-mode)
+(provide 'cccp)
